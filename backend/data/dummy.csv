@@ -1,0 +1,11 @@
+ID,Name,Email,Role,Status,JoinDate,Department,Location,Phone,Notes
+1,Alice,alice@example.com,Admin,Active,2023-01-01,IT,Jakarta,0812345671,First user
+2,Bob,bob@example.com,User,Inactive,2023-01-02,Finance,Bandung,0812345672,Second user
+3,Charlie,charlie@example.com,User,Active,2023-01-03,HR,Surabaya,0812345673,Third user
+4,David,david@example.com,Manager,Active,2023-01-04,IT,Jakarta,0812345674,Fourth user
+5,Eva,eva@example.com,User,Active,2023-01-05,Finance,Bandung,0812345675,Fifth user
+6,Frank,frank@example.com,User,Inactive,2023-01-06,HR,Surabaya,0812345676,Sixth user
+7,Grace,grace@example.com,Admin,Active,2023-01-07,IT,Jakarta,0812345677,Seventh user
+8,Hank,hank@example.com,User,Active,2023-01-08,Finance,Bandung,0812345678,Eighth user
+9,Ivy,ivy@example.com,User,Inactive,2023-01-09,HR,Surabaya,0812345679,Ninth user
+10,Jack,jack@example.com,Manager,Active,2023-01-10,IT,Jakarta,0812345680,Tenth user

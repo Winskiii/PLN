@@ -1,0 +1,30 @@
+# Go
+/bin/
+/build/
+/dist/
+*.exe
+*.test
+*.out
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+
+# Env
+.env
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Coverage
+coverage/
+coverage.out
+
+# Docker
+*.tar
+
+# Node (if any)
+node_modules/

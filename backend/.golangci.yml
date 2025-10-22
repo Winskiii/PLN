@@ -1,0 +1,21 @@
+run:
+  timeout: 5m
+  tests: true
+  go: '1.22'
+linters:
+  enable:
+    - govet
+    - errcheck
+    - gosimple
+    - staticcheck
+    - ineffassign
+    - gosec
+    - gocyclo
+    - revive
+issues:
+  exclude-use-default: false
+  exclude-rules:
+    - linters: [gocyclo]
+      text: "function is too complex"
+  max-issues-per-linter: 0
+  max-same-issues: 0

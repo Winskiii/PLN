@@ -1,0 +1,39 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go fmt
+        entry: bash -lc 'go fmt ./...'
+        language: system
+        pass_filenames: false
+      - id: go-vet
+        name: go vet
+        entry: bash -lc 'go vet ./...'
+        language: system
+        pass_filenames: false
+      - id: go-test
+        name: go test
+        entry: bash -lc 'go test ./...'
+        language: system
+        pass_filenames: false
+      - id: golangci-lint
+        name: golangci-lint
+        entry: bash -lc 'golangci-lint run'
+        language: system
+        pass_filenames: false
+      - id: gosec
+        name: gosec
+        entry: bash -lc 'gosec ./...'
+        language: system
+        pass_filenames: false
+      - id: govulncheck
+        name: govulncheck
+        entry: bash -lc 'govulncheck ./...'
+        language: system
+        pass_filenames: false
