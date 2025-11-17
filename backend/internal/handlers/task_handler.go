@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
+	"github.com/rs/zerolog/log"
 
 	"backend/internal/config"
 	"backend/internal/middleware"
@@ -17,13 +17,12 @@ import (
 )
 
 type TaskHandler struct {
-	db     *sql.DB
-	cfg    *config.Config
-	logger *zap.Logger
+	db  *sql.DB
+	cfg *config.Config
 }
 
-func NewTaskHandler(db *sql.DB, cfg *config.Config, logger *zap.Logger) *TaskHandler {
-	return &TaskHandler{db: db, cfg: cfg, logger: logger}
+func NewTaskHandler(db *sql.DB, cfg *config.Config) *TaskHandler {
+	return &TaskHandler{db: db, cfg: cfg}
 }
 
 func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +58,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		h.logger.Error("failed to query tasks", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to query tasks")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to fetch tasks")
 		return
 	}
@@ -74,7 +73,7 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 			&task.CreatedBy, &task.CreatedByName, &task.CreatedAt, &task.UpdatedAt,
 		)
 		if err != nil {
-			h.logger.Error("failed to scan task", zap.Error(err))
+			log.Ctx(r.Context()).Error().Err(err).Msg("failed to scan task")
 			continue
 		}
 		tasks = append(tasks, task)
@@ -100,7 +99,7 @@ func (h *TaskHandler) GetMyTasks(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Query(query, user.UserID)
 	if err != nil {
-		h.logger.Error("failed to query my tasks", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to query my tasks")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to fetch tasks")
 		return
 	}
@@ -115,7 +114,7 @@ func (h *TaskHandler) GetMyTasks(w http.ResponseWriter, r *http.Request) {
 			&task.CreatedBy, &task.CreatedByName, &task.CreatedAt, &task.UpdatedAt,
 		)
 		if err != nil {
-			h.logger.Error("failed to scan task", zap.Error(err))
+			log.Ctx(r.Context()).Error().Err(err).Msg("failed to scan task")
 			continue
 		}
 		tasks = append(tasks, task)
@@ -151,7 +150,7 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		h.logger.Error("failed to get task", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to get task")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -214,7 +213,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	`, id, req.ProjectID, req.Title, req.Description, req.Status, req.Priority, assignedTo, dueDate, user.UserID)
 
 	if err != nil {
-		h.logger.Error("failed to create task", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to create task")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to create task")
 		return
 	}
@@ -242,7 +241,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		h.logger.Error("failed to fetch created task", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to fetch created task")
 		utils.RespondError(w, http.StatusInternalServerError, "task created but failed to fetch")
 		return
 	}
@@ -301,7 +300,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	`, req.Title, req.Description, req.Status, req.Priority, assignedTo, dueDate, id)
 
 	if err != nil {
-		h.logger.Error("failed to update task", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to update task")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to update task")
 		return
 	}
@@ -319,7 +318,7 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Soft delete
 	result, err := h.db.Exec("UPDATE tasks SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL", id)
 	if err != nil {
-		h.logger.Error("failed to delete task", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to delete task")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to delete task")
 		return
 	}
@@ -373,6 +372,6 @@ func (h *TaskHandler) auditLog(userID, action, entityType, entityID, ipAddress s
 	`, userID, action, entityType, entityID, ipAddress)
 
 	if err != nil {
-		h.logger.Error("failed to create audit log", zap.Error(err))
+		log.Error().Err(err).Msg("failed to create audit log")
 	}
 }

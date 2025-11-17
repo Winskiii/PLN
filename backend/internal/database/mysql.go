@@ -6,12 +6,20 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"go.uber.org/zap"
-
-	"backend/internal/config"
+	"github.com/rs/zerolog/log"
 )
 
-func NewMySQL(cfg *config.DatabaseConfig, logger *zap.Logger) (*sql.DB, error) {
+type DatabaseConfig struct {
+	Host     string
+	Port     int
+	Database string
+	Username string
+	Password string
+	MaxOpen  int
+	MaxIdle  int
+}
+
+func NewMySQL(cfg *DatabaseConfig) (*sql.DB, error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&loc=Local",
 		cfg.Username,
 		cfg.Password,
@@ -33,11 +41,11 @@ func NewMySQL(cfg *config.DatabaseConfig, logger *zap.Logger) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	logger.Info("database connected",
-		zap.String("host", cfg.Host),
-		zap.Int("port", cfg.Port),
-		zap.String("database", cfg.Database),
-	)
+	log.Info().
+		Str("host", cfg.Host).
+		Int("port", cfg.Port).
+		Str("database", cfg.Database).
+		Msg("database connected")
 
 	return db, nil
 }

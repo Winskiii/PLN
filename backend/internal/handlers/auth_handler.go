@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/rs/zerolog/log"
 
 	"backend/internal/config"
 	"backend/internal/middleware"
@@ -15,13 +15,12 @@ import (
 )
 
 type AuthHandler struct {
-	db     *sql.DB
-	cfg    *config.Config
-	logger *zap.Logger
+	db  *sql.DB
+	cfg *config.Config
 }
 
-func NewAuthHandler(db *sql.DB, cfg *config.Config, logger *zap.Logger) *AuthHandler {
-	return &AuthHandler{db: db, cfg: cfg, logger: logger}
+func NewAuthHandler(db *sql.DB, cfg *config.Config) *AuthHandler {
+	return &AuthHandler{db: db, cfg: cfg}
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +57,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		h.logger.Error("failed to query user", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to query user")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -77,9 +76,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		newAttempts := user.FailedLoginAttempts + 1
 		var lockUntil sql.NullTime
 
-		if newAttempts >= h.cfg.Security.MaxLoginAttempts {
+		const maxLoginAttempts = 5
+		const lockoutMinutes = 15
+
+		if newAttempts >= maxLoginAttempts {
 			lockUntil = sql.NullTime{
-				Time:  time.Now().Add(h.cfg.Security.LockoutDuration),
+				Time:  time.Now().Add(time.Minute * lockoutMinutes),
 				Valid: true,
 			}
 		}
@@ -103,23 +105,24 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	`, time.Now(), user.ID)
 
 	if err != nil {
-		h.logger.Error("failed to reset login attempts", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to reset login attempts")
 	}
 
 	// Generate tokens
 	accessToken, err := utils.GenerateAccessToken(
 		user.ID, user.Username, user.Email, user.RoleID, user.RoleName,
-		h.cfg.JWT.Secret, h.cfg.JWT.AccessTokenTTL,
+		h.cfg.JWTSecret, h.cfg.JWTTTL,
 	)
 	if err != nil {
-		h.logger.Error("failed to generate access token", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to generate access token")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	refreshToken, err := utils.GenerateRefreshToken(user.ID, h.cfg.JWT.Secret, h.cfg.JWT.RefreshTokenTTL)
+	refreshTTL := 7 * 24 * time.Hour
+	refreshToken, err := utils.GenerateRefreshToken(user.ID, h.cfg.JWTSecret, refreshTTL)
 	if err != nil {
-		h.logger.Error("failed to generate refresh token", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to generate refresh token")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -154,7 +157,7 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		h.logger.Error("failed to get user", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to get user")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -169,6 +172,6 @@ func (h *AuthHandler) auditLog(userID, action, entityType, entityID, ipAddress s
 	`, userID, action, entityType, entityID, ipAddress)
 
 	if err != nil {
-		h.logger.Error("failed to create audit log", zap.Error(err))
+		log.Error().Err(err).Msg("failed to create audit log")
 	}
 }

@@ -5,14 +5,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
+	"backend/internal/utils"
 )
 
 type ctxKey string
 
 const userKey ctxKey = "user"
 
-// AuthJWT validates a Bearer JWT and sets X-User header from 'sub' claim.
+// AuthJWT validates a Bearer JWT using project utils and stores claims in context.
 func AuthJWT(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -22,25 +22,37 @@ func AuthJWT(secret string) func(http.Handler) http.Handler {
 				return
 			}
 			tokenStr := strings.TrimPrefix(auth, "Bearer ")
-			token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, jwt.ErrTokenUnverifiable
-				}
-				return []byte(secret), nil
-			})
-			if err != nil || !token.Valid {
+
+			// Validate and parse into Claims
+			claims, err := utils.ValidateToken(tokenStr, secret)
+			if err != nil {
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 				return
 			}
-			if claims, ok := token.Claims.(jwt.MapClaims); ok {
-				if sub, ok := claims["sub"].(string); ok {
-					// Set in context and header for downstream handlers
-					ctx := context.WithValue(r.Context(), userKey, sub)
-					r = r.WithContext(ctx)
-					w.Header().Set("X-User", sub)
-				}
+
+			// Store claims in context and expose a header for compatibility
+			ctx := context.WithValue(r.Context(), userKey, claims)
+			r = r.WithContext(ctx)
+			if claims != nil && claims.UserID != "" {
+				w.Header().Set("X-User", claims.UserID)
 			}
+
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// GetUserFromContext returns parsed token claims stored by AuthJWT.
+func GetUserFromContext(ctx context.Context) (*utils.Claims, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	v := ctx.Value(userKey)
+	if v == nil {
+		return nil, false
+	}
+	if claims, ok := v.(*utils.Claims); ok {
+		return claims, true
+	}
+	return nil, false
 }

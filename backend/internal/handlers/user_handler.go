@@ -7,7 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/bcrypt"
 
 	"backend/internal/config"
 	"backend/internal/middleware"
@@ -16,13 +17,12 @@ import (
 )
 
 type UserHandler struct {
-	db     *sql.DB
-	cfg    *config.Config
-	logger *zap.Logger
+	db  *sql.DB
+	cfg *config.Config
 }
 
-func NewUserHandler(db *sql.DB, cfg *config.Config, logger *zap.Logger) *UserHandler {
-	return &UserHandler{db: db, cfg: cfg, logger: logger}
+func NewUserHandler(db *sql.DB, cfg *config.Config) *UserHandler {
+	return &UserHandler{db: db, cfg: cfg}
 }
 
 func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +36,7 @@ func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Query(query)
 	if err != nil {
-		h.logger.Error("failed to query users", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to query users")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to fetch users")
 		return
 	}
@@ -50,7 +50,7 @@ func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
 			&user.LastLoginAt, &user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {
-			h.logger.Error("failed to scan user", zap.Error(err))
+			log.Error().Err(err).Msg("failed to scan user")
 			continue
 		}
 		users = append(users, *user.ToResponse())
@@ -81,7 +81,7 @@ func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		h.logger.Error("failed to get user", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to get user")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -122,7 +122,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var exists int
 	err := h.db.QueryRow("SELECT COUNT(*) FROM users WHERE email = ? AND deleted_at IS NULL", req.Email).Scan(&exists)
 	if err != nil {
-		h.logger.Error("failed to check email", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to check email")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -135,7 +135,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Check if username exists
 	err = h.db.QueryRow("SELECT COUNT(*) FROM users WHERE username = ? AND deleted_at IS NULL", req.Username).Scan(&exists)
 	if err != nil {
-		h.logger.Error("failed to check username", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to check username")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -146,9 +146,9 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Hash password
-	passwordHash, err := utils.HashPassword(req.Password, h.cfg.Security.BcryptCost)
+	passwordHash, err := utils.HashPassword(req.Password, bcrypt.DefaultCost)
 	if err != nil {
-		h.logger.Error("failed to hash password", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to hash password")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -161,7 +161,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	`, id, req.Username, req.Email, passwordHash, req.RoleID)
 
 	if err != nil {
-		h.logger.Error("failed to create user", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to create user")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to create user")
 		return
 	}
@@ -184,7 +184,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		h.logger.Error("failed to fetch created user", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to fetch created user")
 		utils.RespondError(w, http.StatusInternalServerError, "user created but failed to fetch")
 		return
 	}
@@ -233,7 +233,7 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 	`, req.Username, req.Email, req.RoleID, id)
 
 	if err != nil {
-		h.logger.Error("failed to update user", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to update user")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to update user")
 		return
 	}
@@ -251,7 +251,7 @@ func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Soft delete
 	result, err := h.db.Exec("UPDATE users SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL", id)
 	if err != nil {
-		h.logger.Error("failed to delete user", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to delete user")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to delete user")
 		return
 	}
@@ -275,6 +275,6 @@ func (h *UserHandler) auditLog(userID, action, entityType, entityID, ipAddress s
 	`, userID, action, entityType, entityID, ipAddress)
 
 	if err != nil {
-		h.logger.Error("failed to create audit log", zap.Error(err))
+		log.Error().Err(err).Msg("failed to create audit log")
 	}
 }

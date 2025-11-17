@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
+	"github.com/rs/zerolog/log"
 
 	"backend/internal/config"
 	"backend/internal/middleware"
@@ -16,13 +16,12 @@ import (
 )
 
 type ProjectHandler struct {
-	db     *sql.DB
-	cfg    *config.Config
-	logger *zap.Logger
+	db  *sql.DB
+	cfg *config.Config
 }
 
-func NewProjectHandler(db *sql.DB, cfg *config.Config, logger *zap.Logger) *ProjectHandler {
-	return &ProjectHandler{db: db, cfg: cfg, logger: logger}
+func NewProjectHandler(db *sql.DB, cfg *config.Config) *ProjectHandler {
+	return &ProjectHandler{db: db, cfg: cfg}
 }
 
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +53,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		h.logger.Error("failed to query projects", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to query projects")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to fetch projects")
 		return
 	}
@@ -68,7 +67,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 			&project.OwnerID, &project.OwnerName, &project.CreatedAt, &project.UpdatedAt,
 		)
 		if err != nil {
-			h.logger.Error("failed to scan project", zap.Error(err))
+			log.Error().Err(err).Msg("failed to scan project")
 			continue
 		}
 		projects = append(projects, project)
@@ -99,7 +98,7 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		h.logger.Error("failed to get project", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to get project")
 		utils.RespondError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -138,7 +137,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	`, id, req.Name, req.Description, req.Status, user.UserID)
 
 	if err != nil {
-		h.logger.Error("failed to create project", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to create project")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to create project")
 		return
 	}
@@ -161,7 +160,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		h.logger.Error("failed to fetch created project", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to fetch created project")
 		utils.RespondError(w, http.StatusInternalServerError, "project created but failed to fetch")
 		return
 	}
@@ -211,7 +210,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	`, req.Name, req.Description, req.Status, id)
 
 	if err != nil {
-		h.logger.Error("failed to update project", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to update project")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to update project")
 		return
 	}
@@ -229,7 +228,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Soft delete
 	result, err := h.db.Exec("UPDATE projects SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL", id)
 	if err != nil {
-		h.logger.Error("failed to delete project", zap.Error(err))
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to delete project")
 		utils.RespondError(w, http.StatusInternalServerError, "failed to delete project")
 		return
 	}
@@ -253,6 +252,6 @@ func (h *ProjectHandler) auditLog(userID, action, entityType, entityID, ipAddres
 	`, userID, action, entityType, entityID, ipAddress)
 
 	if err != nil {
-		h.logger.Error("failed to create audit log", zap.Error(err))
+		log.Error().Err(err).Msg("failed to create audit log")
 	}
 }

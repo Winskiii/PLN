@@ -2,8 +2,11 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,13 +17,16 @@ import (
 	"github.com/rs/zerolog/log"
 
 	appcfg "backend/internal/config"
+	"backend/internal/database"
 	apphandlers "backend/internal/handlers"
 	appmw "backend/internal/middleware"
+	"backend/internal/models"
 )
 
 type Server struct {
 	cfg *appcfg.Config
 	htt *http.Server
+	db  *sql.DB
 }
 
 func New(cfg *appcfg.Config) *Server {
@@ -30,6 +36,32 @@ func New(cfg *appcfg.Config) *Server {
 		level = zerolog.InfoLevel
 	}
 	zerolog.SetGlobalLevel(level)
+
+	// Initialize database
+	dbPort, _ := strconv.Atoi(getEnv("DB_PORT", "3306"))
+	dbMaxOpen, _ := strconv.Atoi(getEnv("DB_MAX_OPEN", "25"))
+	dbMaxIdle, _ := strconv.Atoi(getEnv("DB_MAX_IDLE", "5"))
+
+	dbCfg := &database.DatabaseConfig{
+		Host:     getEnv("DB_HOST", "localhost"),
+		Port:     dbPort,
+		Database: getEnv("DB_DATABASE", "work_management"),
+		Username: getEnv("DB_USERNAME", "root"),
+		Password: getEnv("DB_PASSWORD", ""),
+		MaxOpen:  dbMaxOpen,
+		MaxIdle:  dbMaxIdle,
+	}
+
+	db, err := database.NewMySQL(dbCfg)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to connect database")
+	}
+
+	// Initialize handlers
+	authHandler := apphandlers.NewAuthHandler(db, cfg)
+	userHandler := apphandlers.NewUserHandler(db, cfg)
+	projectHandler := apphandlers.NewProjectHandler(db, cfg)
+	taskHandler := apphandlers.NewTaskHandler(db, cfg)
 
 	r := chi.NewRouter()
 
@@ -76,11 +108,46 @@ func New(cfg *appcfg.Config) *Server {
 		// v1 routes
 		r.Route("/v1", func(r chi.Router) {
 			r.Get("/ping", apphandlers.Ping)
+
+			// Auth routes (public)
 			r.Route("/auth", func(r chi.Router) {
-				r.Post("/login", apphandlers.Login(cfg))
+				r.Post("/login", authHandler.Login)
 				r.Group(func(r chi.Router) {
 					r.Use(appmw.AuthJWT(cfg.JWTSecret))
-					r.Get("/me", apphandlers.Me())
+					r.Get("/me", authHandler.GetMe)
+				})
+			})
+
+			// Protected routes (require authentication)
+			r.Group(func(r chi.Router) {
+				r.Use(appmw.AuthJWT(cfg.JWTSecret))
+
+				// Users management (Admin only)
+				r.Route("/users", func(r chi.Router) {
+					r.With(appmw.RequireRole(models.RoleAdmin)).Get("/", userHandler.List)
+					r.With(appmw.RequireRole(models.RoleAdmin)).Post("/", userHandler.Create)
+					r.With(appmw.RequireRole(models.RoleAdmin)).Get("/{id}", userHandler.Get)
+					r.With(appmw.RequireRole(models.RoleAdmin)).Put("/{id}", userHandler.Update)
+					r.With(appmw.RequireRole(models.RoleAdmin)).Delete("/{id}", userHandler.Delete)
+				})
+
+				// Projects management
+				r.Route("/projects", func(r chi.Router) {
+					r.Get("/", projectHandler.List)
+					r.Post("/", projectHandler.Create)
+					r.Get("/{id}", projectHandler.Get)
+					r.Put("/{id}", projectHandler.Update)
+					r.Delete("/{id}", projectHandler.Delete)
+				})
+
+				// Tasks management
+				r.Route("/tasks", func(r chi.Router) {
+					r.Get("/", taskHandler.List)
+					r.Get("/my", taskHandler.GetMyTasks)
+					r.Post("/", taskHandler.Create)
+					r.Get("/{id}", taskHandler.Get)
+					r.Put("/{id}", taskHandler.Update)
+					r.Delete("/{id}", taskHandler.Delete)
 				})
 			})
 		})
@@ -90,6 +157,7 @@ func New(cfg *appcfg.Config) *Server {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	return &Server{
 		cfg: cfg,
+		db:  db,
 		htt: &http.Server{
 			Addr:              addr,
 			Handler:           bodyLimit(r, cfg.MaxRequestBodySize),
@@ -99,6 +167,13 @@ func New(cfg *appcfg.Config) *Server {
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	}
+}
+
+func getEnv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
 
 // bodyLimit returns a handler that limits the size of request bodies.
@@ -118,5 +193,8 @@ func (s *Server) Start() error {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	log.Info().Msg("shutting down server")
+	if s.db != nil {
+		s.db.Close()
+	}
 	return s.htt.Shutdown(ctx)
 }
